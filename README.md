@@ -6,14 +6,32 @@ The pipeline currently begins with tared cellranger output, completing per sampl
 ![image](https://github.com/NCI-CCR-POB/POB_snMultiome_pipeline/assets/114779622/a60b67de-341c-47b0-83e5-7ac3025d3fad)  
 **Overview of snMultiome analysis Pipeline**
 
-## 2.Software/Package requirement  
-The pipeline was built based on R4.3.2 and Python 3.9     
+## 2.Setup Dependencies
+The R and python used in the pipeline are R4.3.2 and Python 3.9     
 Please check if the R package in file `` or python packages in file `` have been installed. Please modify the path in `program.py` file.     
-Please also check if the    
+Please check if [**reticulate**](https://rstudio.github.io/reticulate/) has been installed and modify the path in `` file. reticulate is the R interface to use Python script. One python based software [**scrublet**](https://github.com/swolock/scrublet) was used in R script for double removal.      
 
 
-## 3.Usage    
-  
+## 3.Usage
+* 1) Preparing Input Manifest File in assets/input_manifest_cellranger.csv
+     “uniqueID”, “prefix”, "masterID",“subfolder” are required in the Column 1, 2,3 and last column. All the other fields between masterID and subfolder will be added into seurat object metadata.     
+     example:   
+     <img width="1328" alt="image" src="https://github.com/NCI-CCR-POB/POB_snMultiome_pipeline/assets/114779622/2fa836bc-4e58-418d-bfc8-d5c8abc8f1b5">      
+     **subfolder**: is the folder that contains the tared cellranger output. The full path which will be used in the wrapper for looking for the tar files are project_rawdata_dir/subfolder. Please modify the wrapper in order to generate softlink of the tar files.
+     
+     
+* 2) Use the wrapper to generate softlink of the tar files, generate config files, copy the scripts to the analysis folder
+    Please modify the source path in the wrapper!!!!
+    export PATH=$PATH:/path/to/snMultiomePipeline (this is the path which contain the run_snakemake_sc_v2.py)  
+    run_snakemake_sc_v2.py --help  
+    <img width="1455" alt="image" src="https://github.com/NCI-CCR-POB/POB_snMultiome_pipeline/assets/114779622/b3ce137b-5bf6-4deb-9ef2-e7c864c21064">
+    example:
+    run_snakemake_sc_v2.py -p ccrccdi4 -a N -atacmin Y -mem regular -umapres 0.2 -parallel Y /data/CCRCCDI/rawdata/ccrccdi4 snmultiome hg38 (This step only prepare the analysis folder)    
+    run_snakemake_sc_v2.py --rerun (This step will start the pipeline)
+
+
+* 3) Here is the detailed documentation    
+     
   
 ## 4. References    
 * This Pipeline was built by [**Ying Wu**](ying.wu@nih.gov) based on vigenette from [**Seurat**](https://satijalab.org/seurat/) and [**Signac**](https://stuartlab.org/signac/)    
