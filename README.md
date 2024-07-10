@@ -3,7 +3,7 @@ This snakemake pipeline was developed for processing snMultiome data and current
 
 ## 1.Overview    
 The pipeline currently begins with tared cellranger output, completing per sample quality control, and multiple sample integration. 
-![image](https://github.com/NCI-CCR-POB/POB_snMultiome_pipeline/assets/114779622/9999f859-0f0d-4c7d-b239-4d074eb225b0)   
+<img src="image/scMultiome_analysis_pipeline.svg" width="800">   
 **Overview of snMultiome analysis Pipeline**
 
 ## 2.Setup Dependencies
