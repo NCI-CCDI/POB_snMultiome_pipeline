@@ -7,16 +7,18 @@ The pipeline currently begins with tared cellranger output, completing per sampl
 **Overview of snMultiome analysis Pipeline**
 
 ## 2.Software/Package requirement  
-The pipeline was built based on R4.3.2 and Python 3.9 
-Please check if the R package in file `` or python packages in file `` have been installed. Please modify the path in `program.py` file.  
-Please also check if the 
+The pipeline was built based on R4.3.2 and Python 3.9     
+Please check if the R package in file `` or python packages in file `` have been installed. Please modify the path in `program.py` file.     
+Please also check if the    
 
 
-## 3.Usage  
+## 3.Usage    
   
   
-## 4. References  
-This repo was originally generated from the CCBR Nextflow Template. The template takes inspiration from nektool1 and the nf-core template. If you plan to contribute your pipeline to nf-core, don't use this template -- instead follow nf-core's instructions2.
+## 4. References    
+* This Pipeline was built by [**Ying Wu**](ying.wu@nih.gov) based on vigenette from [**Seurat**](https://satijalab.org/seurat/) and [**Signac**](https://stuartlab.org/signac/)    
+* Incorporate the snMultiome pipeline from POB staff scientist [**Xiyuan Zhang**](xiyuan.zhang@nih.gov)      
+* Incorporate several functions from CCBR [**SINCLAIR**](https://github.com/CCBR/SINCLAIR) pipeline  
 
 ## 5. Feedback
-For comments/suggestions/advice please reach out to Ying Wu
+For comments/suggestions/advice please reach out to [**Ying Wu**](ying.wu@nih.gov)
