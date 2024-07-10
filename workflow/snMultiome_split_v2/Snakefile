@@ -1,0 +1,241 @@
+import os
+import sys
+import glob
+import pandas as pd
+import yaml
+
+#######define software path in this part#########
+current_dir = os.getcwd()
+sys.path.append(f'{current_dir}/config')
+import config
+import program
+scriptpath = f'{current_dir}/scripts'
+
+#########################################################
+# READ CLUSTER PER-RULE REQUIREMENTS
+#########################################################
+CLUSTERYAML = os.path.join(current_dir,"config/cluster.yaml")
+with open(CLUSTERYAML) as json_file:
+    CLUSTER = yaml.safe_load(json_file)
+
+## Create lambda functions to allow a way to insert read-in values
+## as rule directives
+getthreads=lambda rname:int(CLUSTER[rname]["threads"]) if rname in CLUSTER and "threads" in CLUSTER[rname] else int(CLUSTER["__default__"]["threads"])
+getmemg=lambda rname:CLUSTER[rname]["mem"] if rname in CLUSTER and "mem" in CLUSTER[rname] else CLUSTER["__default__"]["mem"]
+getmemG=lambda rname:getmemg(rname).replace("g","G")
+
+######read the sample info & parameters#######################
+raw = config.rawdata
+sampleInfo = config.sampleInfo
+analysis = config.analysis
+project = config.project
+species = config.species
+npcs = config.npcs
+ATAC_minimal = config.ATAC_minimal
+UMAP_res = config.resolution
+akanchor = config.akanchor
+akfilter = config.akfilter
+akweight = config.akweight
+gkanchor = config.gkanchor
+gkfilter = config.gkfilter
+gkweight = config.gkweight
+nCount_RNA_LL = config.nCount_RNA_LL
+nCount_ATAC_LL = config.nCount_ATAC_LL
+nCount_RNA_UL = config.nCount_RNA_UL
+nCount_ATAC_UL = config.nCount_ATAC_UL
+nFeature_RNA_LL = config.nFeature_RNA_LL
+nFeature_ATAC_LL = config.nFeature_ATAC_LL
+nucleosome_signal_UL = config.nucleosome_signal_UL
+TSSenrichment_LL = config.TSSenrichment_LL
+pct_reads_in_peaks_LL = config.pct_reads_in_peaks_LL
+blacklist_fraction_UL = config.blacklist_fraction_UL
+mt_UL = config.mt_UL
+
+filtering_script = "3.Multiome_preprocess_filtering_perSample_ATACmin.R" if ATAC_minimal=="Y" else "3.Multiome_preprocess_filtering_perSample.R"
+threshold_script = "3.Multiome_preprocess_filtering_threshold_ATACmin.R" if ATAC_minimal=="Y" else "3.Multiome_preprocess_filtering_threshold.R"
+
+print (raw,"\n",sampleInfo,"\n",analysis)
+print(species, npcs)
+sample_info = pd.read_csv(sampleInfo,sep=",",header=0)
+SAMPLES = sample_info["uniqueID"].tolist()
+print(SAMPLES)
+
+
+rule all:
+    input: 
+        expand("cellranger_output/{sample}",sample=SAMPLES),
+        expand("cellranger_output/{sample}/outs/filtered_feature_bc_matrix.h5",sample=SAMPLES),
+        "cellranger_finalreport/"+project+".xlsx",
+        "result_wSoupX/seurat/1.object_list_rawGEX.rds",
+        expand("result_wSoupX/seurat/preprocessed/{sample}_GEXATACobj_raw.rds",sample=SAMPLES),
+        "result_wSoupX/seurat/2.object_list_rawGEXATAC.rds",
+        "result_wSoupX/qc_result_plot/qc_before_filtering.pdf",
+        "result_wSoupX/qc_result_plot/QC_stats_preFilt.tsv",
+        expand("result_wSoupX/seurat/preprocessed/{sample}_GEXATACobj_filt.rds",sample=SAMPLES),
+        "result_wSoupX/qc_result_plot/QC_stats_FilteredCell.tsv",
+        "result_wSoupX/seurat/3.object_list_GEXATAC_filt.rds",
+        "result_wSoupX/seurat/3.object_list_filtGEXATAC_consnsus.rds",
+        "result_wSoupX/qc_result_plot/QC_stats_postFilt.tsv",
+        "result_wSoupX/seurat/4.object_list_filtGEXATAC_preprocess_PCA.rds",
+        "result_wSoupX/integration/5.integrated_SeuratObj_RPCA.rds",
+        "result_wSoupX/integration_plot/2.integrated_umap_GEX.pdf",
+        "result_wSoupX/integration/6.integrated_SeuratObj_RLSI.rds",
+        "result_wSoupX/integration_plot/4.integrated_umap_ATAC.pdf",
+        "result_wSoupX/integration/7.integrated_SeuratObj_WNN_anno" + UMAP_res+ ".rds",
+        "secondary_analysis/7.integrated_SeuratObj_WNN_anno" + UMAP_res+ ".rds", "aggregate.complete"
+        #expand("result_wSoupX/seurat/preprocessed/{sample}_GEXobj_rawraw.rds",sample=SAMPLES),
+
+rule cellranger_untar:
+    input:"00_FullCellrangerOutputs/{sample}.tar"
+    output:
+        directory("cellranger_output/{sample}"),"cellranger_output/{sample}/outs/filtered_feature_bc_matrix.h5"
+    params: sample_name = "{sample}"
+    shell:
+        "tar -xvf {input} -C cellranger_output --touch 1>cellranger_output/{params.sample_name}.untar.o 2>cellranger_output/{params.sample_name}.untar.e"
+
+rule cellrangerStat:
+    input: "assets/input_manifest_cellranger.csv",expand("cellranger_output/{sample}/outs/filtered_feature_bc_matrix.h5",sample=SAMPLES)
+    output: "cellranger_finalreport/"+project+".xlsx"
+    shell: """
+        {program.python3} {scriptpath}/python/generateSummaryFiles.py {raw} {project}
+    """
+
+rule cellrangerAggregate:
+    input: csv="Aggregate.csv",h5=expand("cellranger_output/{sample}/outs/filtered_feature_bc_matrix.h5",sample=SAMPLES)
+    output: touch("aggregate.complete")
+    log: err="run_10x_aggregate.err", log="run_10x_aggregate.log"
+    shell: """
+        {program.cellranger_arc} aggr --id=Aggregate --csv={input.csv} --normalize=depth  --reference=/data/CCRCCDI/software/Tools/cellranger/reference/refdata-cellranger-arc-GRCh38-2020-A-2.0.0 2>{log.err} 1>{log.log}
+    """
+
+rule soupxscrublet_per:
+    input: "assets/input_manifest_cellranger.csv","cellranger_output/{sample}/outs/filtered_feature_bc_matrix.h5"
+    output: "result_wSoupX/seurat/preprocessed/{sample}_GEXobj_raw.rds"
+    params: sample_name="{sample}"
+    shell: """
+        {program.Rscript} {scriptpath}/R/main/1.Multiome_preprocess_rawGEX_wSoupX_perSample.R --input_path {raw} --analysis_dir {analysis} --project_name {project} --sample {params.sample_name} --nCount_RNA_LL {nCount_RNA_LL} --nFeature_RNA_LL {nFeature_RNA_LL} --mt_UL {mt_UL} --res {UMAP_res}
+    """
+
+rule rawGEXobjlist:
+    input: "assets/input_manifest_cellranger.csv",expand("result_wSoupX/seurat/preprocessed/{sample}_GEXobj_raw.rds",sample=SAMPLES)
+    output: "result_wSoupX/seurat/1.object_list_rawGEX.rds"
+    shell: """
+        {program.Rscript} {scriptpath}/R/main/1.Multiome_preprocess_rawGEX_wSoupX_gmmcutoff.R {analysis}  {project}
+    """
+
+rule addATAC_per:
+    input: "result_wSoupX/seurat/1.object_list_rawGEX.rds"
+    output: "result_wSoupX/seurat/preprocessed/{sample}_GEXATACobj_raw.rds"
+    params: sample_name="{sample}"
+    shell: """
+        {program.Rscript} {scriptpath}/R/main/2.Multiome_preprocess_rawATAC_perSample.R {raw} {analysis} {project} {params.sample_name}
+    """
+
+rule addATACobjlist_QC:
+    input: "result_wSoupX/seurat/1.object_list_rawGEX.rds",expand("result_wSoupX/seurat/preprocessed/{sample}_GEXATACobj_raw.rds",sample=SAMPLES)
+    output: "result_wSoupX/seurat/2.object_list_rawGEXATAC.rds","result_wSoupX/qc_result_plot/qc_before_filtering.pdf"
+    shell: """
+        {program.Rscript} {scriptpath}/R/main/2.Multiome_preprocess_rawATAC_QCplot_new.R {analysis} {project}
+    """
+
+rule getQCstats_prefilt:
+    input: "result_wSoupX/seurat/2.object_list_rawGEXATAC.rds"
+    output: "result_wSoupX/qc_result_plot/QC_stats_preFilt.tsv"
+    shell: """
+        {program.Rscript} {scriptpath}/R/main/get_qc_preFilt.R  {analysis}
+    """
+
+rule filter_GEXATAC:
+    input: "result_wSoupX/seurat/preprocessed/{sample}_GEXATACobj_raw.rds"
+    output: "result_wSoupX/seurat/preprocessed/{sample}_GEXATACobj_filt.rds"
+    params: sample_name="{sample}"
+    shell: """
+       {program.Rscript} {scriptpath}/R/main/3.Multiome_preprocess_filtering_perSample_New.R --analysis_dir {analysis} --sample {params.sample_name} --nCount_RNA_LL {nCount_RNA_LL} --nCount_RNA_UL {nCount_RNA_UL} --nCount_ATAC_LL {nCount_ATAC_LL} --nCount_ATAC_UL {nCount_ATAC_UL} --nFeature_RNA_LL {nFeature_RNA_LL} --nFeature_ATAC_LL {nFeature_ATAC_LL} --nucleosome_signal_UL {nucleosome_signal_UL} --TSSenrichment_LL {TSSenrichment_LL}  --pct_reads_in_peaks_LL {pct_reads_in_peaks_LL} --blacklist_fraction_UL {blacklist_fraction_UL} --mt_UL {mt_UL}
+
+
+    """
+rule filter_threshold:
+    input: expand("result_wSoupX/seurat/preprocessed/{sample}_GEXATACobj_filt.rds",sample=SAMPLES)
+    output: "result_wSoupX/qc_result_plot/QC_stats_FilteredCell.tsv","result_wSoupX/seurat/3.object_list_GEXATAC_filt.rds"
+    shell: """
+       {program.Rscript} {scriptpath}/R/main/3.Multiome_preprocess_filtering_threshold_new.R --analysis_dir {analysis}  --nCount_RNA_LL {nCount_RNA_LL}  --nCount_RNA_UL {nCount_RNA_UL} --nCount_ATAC_LL {nCount_ATAC_LL} --nCount_ATAC_UL {nCount_ATAC_UL} --nFeature_RNA_LL {nFeature_RNA_LL} --nFeature_ATAC_LL {nFeature_ATAC_LL} --nucleosome_signal_UL {nucleosome_signal_UL} --TSSenrichment_LL {TSSenrichment_LL}  --pct_reads_in_peaks_LL {pct_reads_in_peaks_LL} --blacklist_fraction_UL {blacklist_fraction_UL} --mt_UL {mt_UL}
+    """
+
+rule MACS_consensus:
+    input: "result_wSoupX/seurat/3.object_list_GEXATAC_filt.rds"
+    output: "result_wSoupX/seurat/3.object_list_filtGEXATAC_consnsus.rds"
+    shell: """
+       {program.Rscript} {scriptpath}/R/main/3.Multiome_preprocess_MACS_consensus.R {raw} {analysis}
+
+    """
+
+rule getQCstats_postfilt:
+    input: "result_wSoupX/seurat/3.object_list_GEXATAC_filt.rds"
+    output: "result_wSoupX/qc_result_plot/QC_stats_postFilt.tsv"
+    shell: """
+        {program.Rscript} {scriptpath}/R/main/get_qc_postFilt.R  {analysis}
+    """
+
+
+rule RNA_RPCA:
+    input: "result_wSoupX/seurat/3.object_list_filtGEXATAC_consnsus.rds"
+    output: "result_wSoupX/seurat/4.object_list_filtGEXATAC_preprocess_PCA.rds",  "result_wSoupX/integration/5.integrated_SeuratObj_RPCA.rds"
+    params: threads = getthreads("RNA_RPCA")
+    shell: """
+        {program.Rscript} {scriptpath}/R/main/5.Multiome_process_rpca.R --analysis_dir {analysis} --species {species} --npcs {npcs} --threads {params.threads} --res {UMAP_res} --kanchor {gkanchor} --kfilter {gkfilter} --kweight {gkweight}
+    """ 
+
+rule RNA_RPCA_UMAP:
+    input:  "result_wSoupX/integration/5.integrated_SeuratObj_RPCA.rds"
+    output: "result_wSoupX/integration_plot/2.integrated_umap_GEX.pdf"
+    params: threads = getthreads("RNA_RPCA")
+    shell: """
+        {program.Rscript} {scriptpath}/R/main/5.Multiome_process_rpca_merge_umap.R --analysis_dir {analysis} --npcs {npcs} --threads {params.threads} --res {UMAP_res}
+    """ 
+
+rule RNA_RLSI:
+    input:  "result_wSoupX/integration/5.integrated_SeuratObj_RPCA.rds"
+    output: "result_wSoupX/integration/6.integrated_SeuratObj_RLSI.rds"
+    params: threads = getthreads("RNA_RLSI")
+    shell: """
+        {program.Rscript} {scriptpath}/R/main/6.Multiome_lsi.R  --analysis_dir {analysis} --species {species} --npcs {npcs} --threads {params.threads} --kanchor {akanchor} --kfilter {akfilter} --kweight {akweight}
+    """
+
+rule RNA_RLSI_UMAP:
+    input:  "result_wSoupX/integration/6.integrated_SeuratObj_RLSI.rds"
+    output: "result_wSoupX/integration_plot/4.integrated_umap_ATAC.pdf"
+    params: threads = getthreads("RNA_RLSI")
+    shell: """
+        {program.Rscript} {scriptpath}/R/main/6.Multiome_lsi_merge_UMAP.R  --analysis_dir {analysis} --npcs {npcs} --threads {params.threads}
+    """
+
+rule RNA_WNN:
+    input:  "result_wSoupX/integration/6.integrated_SeuratObj_RLSI.rds"
+    output: "result_wSoupX/integration/7.integrated_SeuratObj_WNN_anno" + UMAP_res+ ".rds"
+    params: threads = getthreads("RNA_WNN")
+    shell: """
+        {program.Rscript} {scriptpath}/R/main/7.Multiome_wnn.R --analysis_dir {analysis} --species {species} --npcs {npcs} --threads {params.threads} --res  {UMAP_res}
+    """
+
+rule copy_files:
+    input:
+        "result_wSoupX/seurat/2.object_list_rawGEXATAC.rds",
+        "result_wSoupX/seurat/3.object_list_GEXATAC_filt.rds",
+        "result_wSoupX/seurat/3.object_list_filtGEXATAC_consnsus.rds",
+        "result_wSoupX/integration/5.integrated_SeuratObj_RPCA.rds",
+        "result_wSoupX/integration/6.integrated_SeuratObj_RLSI.rds",
+        "result_wSoupX/integration/7.integrated_SeuratObj_WNN_anno" + UMAP_res+ ".rds"
+    output:
+        directory("secondary_analysis"),
+        "secondary_analysis/2.object_list_rawGEXATAC.rds",
+        "secondary_analysis/3.object_list_GEXATAC_filt.rds",
+        "secondary_analysis/3.object_list_filtGEXATAC_consnsus.rds",
+        "secondary_analysis/5.integrated_SeuratObj_RPCA.rds",
+        "secondary_analysis/6.integrated_SeuratObj_RLSI.rds",
+        "secondary_analysis/7.integrated_SeuratObj_WNN_anno" + UMAP_res+ ".rds"
+    shell:
+        """
+        mkdir -p secondary_analysis &&
+        cp {input} secondary_analysis/ &&
+        echo "Files copied successfully."
+        """

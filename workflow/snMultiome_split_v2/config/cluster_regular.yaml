@@ -1,0 +1,109 @@
+# cluster configuration
+###################################################################
+__default__:
+    gres: lscratch:200
+    mem: 110g
+    partition: norm
+    time: 00-04:00:00
+    threads: 8
+    name: "{rule}.{wildcards}"
+    output: "logs/{rule}.${{SLURM_JOBID}}.%j.{wildcards}.out"
+    error: "logs/{rule}.${{SLURM_JOBID}}.%j.{wildcards}.err"
+#####################################################################
+cellrangerStat:
+    mem: 20g
+    time: 00-12:00:00
+    threads: 4
+cellranger_untar:
+    mem: 20g
+    time: 00-12:00:00
+    threads: 4
+cellrangerAggregate:
+    mem: 200g
+    time: 00-12:00:00
+    threads: 32
+soupxscrublet:
+    mem: 220g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+soupxscrublet_per:
+    mem: 110g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+rawGEXobjlist:
+    mem: 200g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+addATAC:
+    mem: 220g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+addATAC_per:
+    mem: 110g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+addATACobjlist_QC:
+    mem: 200g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+filter_GEXATAC:
+    mem: 220g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+MACS_consensus:
+    mem: 220g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+filter_threshold:
+    mem: 220g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+filter_consensus:
+    mem: 220g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+getQC_postfilt:
+    mem: 110g
+    partition: norm
+    time: 05-00:00:00
+    threads: 8
+getQC_prefilt:
+    mem: 110g
+    partition: norm
+    time: 05-00:00:00
+    threads: 8
+RNA_RPCA:
+    mem: 220g
+    partition: norm
+    time: 10-00:00:00
+    threads: 16
+RNA_RPCA_UMAP:
+    mem: 220g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+RNA_RLSI:
+    mem: 220g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+RNA_RLSI_UMAP:
+    mem: 220g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
+RNA_WNN:
+    mem: 220g
+    partition: norm
+    time: 10-00:00:00
+    threads: 8
